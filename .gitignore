@@ -1,0 +1,27 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Output directories
+output/
+
+# Data files
+*.xlsx
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# IDE/project files (optional, uncomment if you use them)
+# .vscode/
+# *.idea/
+
+test.py
