@@ -158,11 +158,4 @@ def market_crisis_return_distrubition(df: DataFrame):
     display_df = display_df[["Event", "Period Start",
                              "Period End", "Months", "Portfolio", "S&P 500", "Alpha"]]
 
-    # Export to CSV
-    export_csv(df=display_df,
-               filename="market_crisis_return_distrubition.csv", timestamp=True)
-
-    print(f"\n✅ Market crisis return distribution calculated!")
-    print(f"Exported {len(display_df)} events to CSV.")
-
-    return crisis_df, display_df
+    return display_df

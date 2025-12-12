@@ -1,15 +1,14 @@
 from src.monthly_return_distribution import monthly_return_distribution
-from src.quaterly_return_distrubition import quaterly_return_distrubition
+from src.quarterly_return_distrubition import quarterly_return_distrubition
 from src.market_crisis_return_distrubition import market_crisis_return_distrubition
 from src.utils.import_csv import import_csv
-
+from src.utils.export_csv import export_file
 # ========== FILE IMPORT ==========
 
 # Option 1: Specify the file path directly
 FILE_PATH = "trading_data.xlsx"  # Change this to your file name
-
-# Option 2: Let user input the file path
-# FILE_PATH = input("Enter the path to your trading data file (.xlsx or .csv): ")
+# Export to one Excel file with multiple sheets
+OUTPUT_FILE = "trading_analysis.xlsx"
 
 
 def main():
@@ -29,9 +28,26 @@ def main():
 
     # Calculate and display the monthly return distribution
     try:
-        monthly_return_distribution(df)
-        quaterly_return_distrubition(df)
-        market_crisis_return_distrubition(df)
+        allTrades = df.copy()
+        monthly_return, monthly_return_bucket_summary = monthly_return_distribution(
+            df)
+        quarterly_return, quarterly_return_bucket_summary = quarterly_return_distrubition(
+            df)
+        market_crisis_return = market_crisis_return_distrubition(df)
+
+        sheets = {
+            "All Trades": allTrades,
+            "Monthly Return": monthly_return,
+            "Monthly Return Bucket Summary": monthly_return_bucket_summary,
+            "Quarterly Return": quarterly_return,
+            "Quarterly Return Bucket Summary": quarterly_return_bucket_summary,
+            "Market Crisis Return": market_crisis_return
+        }
+
+        export_file(sheets,
+                    filename=OUTPUT_FILE,
+                    timestamp=True)
+
     except Exception as e:
         print(f"\n❌ Error calculating monthly return distribution: {e}")
         exit(1)

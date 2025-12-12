@@ -77,15 +77,4 @@ def monthly_return_distribution(df: DataFrame):
         lambda x: f"${x:,.2f}"
     )
 
-    # Save to CSV
-    export_csv(
-        df=bucket_summary,
-        filename="monthly_bucket_summary.csv",
-        timestamp=True
-    )
-
-    export_csv(
-        df=display_df,
-        filename="monthly_return_distribution.csv",
-        timestamp=True
-    )
+    return display_df, bucket_summary

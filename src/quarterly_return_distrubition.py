@@ -7,7 +7,7 @@ from src.utils.export_csv import export_csv
 from src.utils.get_sp500_returns import get_sp500_quarterly_returns
 
 
-def quaterly_return_distrubition(df: DataFrame):
+def quarterly_return_distrubition(df: DataFrame):
     """
     Build a quarterly return distribution with portfolio vs S&P 500 and buckets.
     The function expects the input DataFrame to contain:
@@ -25,7 +25,8 @@ def quaterly_return_distrubition(df: DataFrame):
 
     start_quarter = df["Entry Date"].min().to_period("Q")
     end_quarter = df["Exit Date"].max().to_period("Q")
-    all_quarters = pd.period_range(start=start_quarter, end=end_quarter, freq="Q")
+    all_quarters = pd.period_range(
+        start=start_quarter, end=end_quarter, freq="Q")
 
     # Aggregate P&L per quarter and ensure full continuity of quarters
     quarterly_pl = (
@@ -52,9 +53,11 @@ def quaterly_return_distrubition(df: DataFrame):
         "%Y-%m-%d"
     )
     end_date = end_quarter.end_time.strftime("%Y-%m-%d")
-    sp500_returns, _ = get_sp500_quarterly_returns(start=start_date, end=end_date)
+    sp500_returns, _ = get_sp500_quarterly_returns(
+        start=start_date, end=end_date)
 
-    quarterly_returns["S&P 500"] = quarterly_returns["Quarter"].map(sp500_returns)
+    quarterly_returns["S&P 500"] = quarterly_returns["Quarter"].map(
+        sp500_returns)
     quarterly_returns["Alpha"] = (
         quarterly_returns["Quarterly Return"] - quarterly_returns["S&P 500"]
     )
@@ -77,12 +80,4 @@ def quaterly_return_distrubition(df: DataFrame):
         lambda x: f"${x:,.2f}"
     )
 
-    # Export summaries
-    export_csv(df=bucket_summary, filename="quarterly_bucket_summary.csv", timestamp=True)
-    export_csv(
-        df=display_df,
-        filename="quarterly_return_distribution.csv",
-        timestamp=True,
-    )
-
-    return quarterly_returns, bucket_summary, display_df
+    return display_df, bucket_summary
