@@ -46,57 +46,62 @@ def export_file(sheets, filename, output_dir="output", timestamp=False):
     Returns:
         str: Full path to the saved CSV file.
     """
-   # Create directory if needed
-    os.makedirs(output_dir, exist_ok=True)
+    try:           # Create directory if needed
+        os.makedirs(output_dir, exist_ok=True)
 
-    # Add timestamp if needed
-    if timestamp:
-        name, ext = os.path.splitext(filename)
-        filename = f"{name}_{datetime.now().strftime('%Y_%m_%d-%H%M%S')}{ext}"
+        # Add timestamp if needed
+        if timestamp:
+            name, ext = os.path.splitext(filename)
+            filename = f"{name}_{datetime.now().strftime('%Y_%m_%d-%H%M%S')}{ext}"
 
-    # Full path
-    full_path = os.path.join(output_dir, filename)
+        # Full path
+        full_path = os.path.join(output_dir, filename)
 
-    with pd.ExcelWriter(full_path, engine="xlsxwriter") as writer:
+        with pd.ExcelWriter(full_path, engine="xlsxwriter") as writer:
 
-        # Dictionary of sheet names + dataframes
+            # Dictionary of sheet names + dataframes
 
-        workbook = writer.book
+            workbook = writer.book
+            workbook.nan_inf_to_errors = True
 
-        # --- HEADER FORMAT (matches your screenshot) ---
-        header_format = workbook.add_format({
-            'bold': True,
-            'text_wrap': True,
-            'valign': 'center',
-            'align': 'center',
-            'bg_color': '#366092',    # Dark blue header background
-            'font_color': 'white',    # White font
-            'border': 1
-        })
+            # --- HEADER FORMAT (matches your screenshot) ---
+            header_format = workbook.add_format({
+                'bold': True,
+                'text_wrap': True,
+                'valign': 'center',
+                'align': 'center',
+                'bg_color': '#366092',    # Dark blue header background
+                'font_color': 'white',    # White font
+                'border': 1
+            })
 
-        # Write each sheet
-        for sheet_name, df_sheet in sheets.items():
+            # Write each sheet
+            for sheet_name, df_sheet in sheets.items():
 
-            df_sheet.to_excel(writer, sheet_name=sheet_name, index=False)
-            worksheet = writer.sheets[sheet_name]
+                df_sheet.to_excel(writer, sheet_name=sheet_name, index=False)
+                worksheet = writer.sheets[sheet_name]
 
-            # Apply header formatting
-            for col_num, col_name in enumerate(df_sheet.columns):
-                worksheet.write(0, col_num, col_name, header_format)
+                # Apply header formatting
+                for col_num, col_name in enumerate(df_sheet.columns):
+                    worksheet.write(0, col_num, col_name, header_format)
 
-            # Apply border + alignment for data rows
-            for row in range(1, len(df_sheet) + 1):
-                for col in range(len(df_sheet.columns)):
-                    worksheet.write(
-                        row, col, df_sheet.iloc[row-1, col])
+                # Apply border + alignment for data rows
+                for row in range(1, len(df_sheet) + 1):
+                    for col in range(len(df_sheet.columns)):
+                        worksheet.write(
+                            row, col, df_sheet.iloc[row-1, col])
 
-            # Auto column width
-            for i, col in enumerate(df_sheet.columns):
-                col_width = max(df_sheet[col].astype(
-                    str).map(len).max(), len(col)) + 2
-                worksheet.set_column(i, i, col_width)
+                # Auto column width
+                for i, col in enumerate(df_sheet.columns):
+                    # Get max cell length (as string) and account for non-string column names
+                    max_len = df_sheet[col].astype(str).str.len().max()
+                    header_len = len(str(col))
+                    col_width = max(max_len if pd.notna(max_len) else 0, header_len) + 2
+                    worksheet.set_column(i, i, col_width)
 
-    print(f"\n✅ Done! Return distribution calculated!")
-    print(f"\n✅ Export completed:", full_path)
+        print(f"\n✅ Done! Return distribution calculated!")
+        print(f"\n✅ Export completed:", full_path)
 
-    return full_path
+        return full_path
+    except Exception as e:
+        raise RuntimeError(f"Error while export file: {e}")

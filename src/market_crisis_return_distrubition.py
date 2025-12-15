@@ -104,7 +104,7 @@ def market_crisis_return_distrubition(df: DataFrame):
 
     # Get market crisis events
     crisis_df = get_market_crisis_events()
-
+    initial_portfolio = df.iloc[0]["Total Portfolio Value"]
     # Calculate returns for each event period
     portfolio_returns = []
     sp500_returns = []
@@ -115,7 +115,7 @@ def market_crisis_return_distrubition(df: DataFrame):
 
         # Calculate portfolio return for this period
         portfolio_return = calculate_portfolio_return_for_period(
-            trading_df, period_start, period_end
+            trading_df, period_start, period_end, initial_portfolio
         )
         portfolio_returns.append(portfolio_return)
 

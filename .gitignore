@@ -9,6 +9,7 @@ __pycache__/
 
 # Output directories
 output/
+test/
 
 # Data files
 *.xlsx

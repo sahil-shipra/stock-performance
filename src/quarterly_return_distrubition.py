@@ -35,7 +35,7 @@ def quarterly_return_distrubition(df: DataFrame):
         .reindex(all_quarters, fill_value=0)
     )
 
-    initial_portfolio = 100_000
+    initial_portfolio = df.iloc[0]["Total Portfolio Value"]
     portfolio_values = initial_portfolio + quarterly_pl.cumsum()
 
     quarterly_returns = pd.DataFrame(
@@ -44,8 +44,29 @@ def quarterly_return_distrubition(df: DataFrame):
             "Total Portfolio Value": portfolio_values,
         }
     )
+    # Track peak-to-trough declines across quarters
+    quarterly_returns["Running Peak"] = (
+        quarterly_returns["Total Portfolio Value"].cummax()
+    )
+    quarterly_returns["Drawdown %"] = (
+        (quarterly_returns["Total Portfolio Value"] /
+         quarterly_returns["Running Peak"] - 1)
+        * 100
+    )
     quarterly_returns["Quarterly Return"] = (
         quarterly_returns["Total Portfolio Value"].pct_change().fillna(0) * 100
+    )
+    available_capital_by_quarter = (
+        df.sort_values("Exit Date")
+        .groupby("Exit Quarter")["Available Capital After Trade"]
+        .last()
+        .reindex(all_quarters)
+        .ffill()
+        .fillna(initial_portfolio)
+    )
+    quarterly_returns["Available Capital"] = available_capital_by_quarter.values
+    quarterly_returns["Available Capital %"] = (
+        available_capital_by_quarter / initial_portfolio * 100
     )
 
     # Pull S&P 500 quarterly returns, include one extra quarter for pct_change
@@ -78,6 +99,15 @@ def quarterly_return_distrubition(df: DataFrame):
     )
     display_df["Total Portfolio Value"] = display_df["Total Portfolio Value"].apply(
         lambda x: f"${x:,.2f}"
+    )
+    display_df['Available Capital'] = display_df['Available Capital'].apply(
+        lambda x: f"${x:,.2f}"
+    )
+    display_df['Available Capital %'] = display_df['Available Capital %'].apply(
+        lambda x: f"{x:.2f}%"
+    )
+    display_df["Drawdown %"] = display_df["Drawdown %"].apply(
+        lambda x: f"{x:.2f}%"
     )
 
     return display_df, bucket_summary

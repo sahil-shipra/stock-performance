@@ -1,12 +1,8 @@
 from pandas import DataFrame
 import pandas as pd
-from datetime import datetime
-import numpy as np
-import os
 from src.utils.get_sp500_returns import (
     get_sp500_monthly_returns,
 )
-from src.utils.export_csv import export_csv
 from dateutil.relativedelta import relativedelta
 
 from src.bucket_classification import bucket_classification
@@ -32,7 +28,7 @@ def monthly_return_distribution(df: DataFrame):
     )
 
     # Starting portfolio value
-    initial_portfolio = 100000
+    initial_portfolio = df.iloc[0]["Total Portfolio Value"]
 
     # Cumulative portfolio values without explicit loops
     portfolio_values = initial_portfolio + monthly_pl.cumsum()
@@ -42,11 +38,31 @@ def monthly_return_distribution(df: DataFrame):
         'Month': all_months.strftime('%b-%y'),
         'Total Portfolio Value': portfolio_values,
     })
+    # Running peak is used to measure drawdowns from the highest portfolio value reached so far.
+    monthly_returns['Running Peak'] = monthly_returns['Total Portfolio Value'].cummax()
+    monthly_returns['Drawdown %'] = (
+        (monthly_returns['Total Portfolio Value'] /
+         monthly_returns['Running Peak']) - 1
+    ) * 100
     monthly_returns['Monthly Return'] = (
         monthly_returns['Total Portfolio Value']
         .pct_change()
         .fillna(0)
         * 100
+    )
+    # Track available capital by month using the last trade of each month.
+    # Align to the full month range so we don't introduce NaNs when months had no trades.
+    available_capital_by_month = (
+        df.sort_values('Exit Date')
+        .groupby('Exit Month')['Available Capital After Trade']
+        .last()
+        .reindex(all_months)
+        .ffill()
+        .fillna(initial_portfolio)
+    )
+    monthly_returns['Available Capital'] = available_capital_by_month.values
+    monthly_returns['Available Capital %'] = (
+        available_capital_by_month / initial_portfolio * 100
     )
 
     one_month_ago = start_date - relativedelta(months=1)
@@ -75,6 +91,15 @@ def monthly_return_distribution(df: DataFrame):
         lambda x: f"{x:.2f}%" if pd.notna(x) else "")
     display_df['Total Portfolio Value'] = display_df['Total Portfolio Value'].apply(
         lambda x: f"${x:,.2f}"
+    )
+    display_df['Available Capital'] = display_df['Available Capital'].apply(
+        lambda x: f"${x:,.2f}"
+    )
+    display_df['Available Capital %'] = display_df['Available Capital %'].apply(
+        lambda x: f"{x:.2f}%"
+    )
+    display_df['Drawdown %'] = display_df['Drawdown %'].apply(
+        lambda x: f"{x:.2f}%"
     )
 
     return display_df, bucket_summary
