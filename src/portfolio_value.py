@@ -34,7 +34,6 @@ def portfolio_value_table(df):
     # --- Extract Month & Year ---
     equity_df["Year"] = equity_df["Date"].dt.year
     equity_df["Month"] = equity_df["Date"].dt.month
-
     # --- Pivot: Average Portfolio Value ---
     pivot = pd.pivot_table(
         equity_df,
@@ -44,16 +43,26 @@ def portfolio_value_table(df):
         aggfunc="mean"
     )
 
-    # --- Add Grand Total Column (Row-wise Average) ---
-    pivot["Grand Total"] = pivot.mean(axis=1)
+    cp = pivot.copy()
 
-    # --- Add Grand Total Row (Column-wise Average) ---
-    grand_row = pd.DataFrame(
-        pivot.mean(axis=0)
-    ).T
+    # --- Add Grand Total Column (Row-wise Average) ---
+    cp = cp.fillna(0).round(2)
+    pivot["Grand Total"] = cp.sum(axis=1)
+    pivot["Average"] = cp.mean(axis=1)
+
+    # --- Add Grand Total Row ---
+    grand_row = cp.sum(axis=0).to_frame().T
+    grand_row["Grand Total"] = pivot["Grand Total"].sum()
+    grand_row["Average"] = pivot["Average"].sum()
     grand_row.index = ["Grand Total"]
 
-    pivot = pd.concat([pivot, grand_row])
+    # --- Add Average Row ---
+    avg_row = cp.mean(axis=0).to_frame().T
+    avg_row["Grand Total"] = pivot["Grand Total"].mean()
+    avg_row["Average"] = pivot["Average"].mean()
+    avg_row.index = ["Average"]
+
+    pivot = pd.concat([pivot, grand_row, avg_row])
 
     # --- Formatting (optional, Excel-like) ---
     pivot = pivot.fillna(0).round(0).astype(int).astype(str)

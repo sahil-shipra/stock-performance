@@ -74,16 +74,29 @@ def cash_management_table(df):
         # Ensure all 12 months are shown even if empty
         pivot = pivot.reindex(index=range(1, 13))
 
-        # --- Add Grand Totals ---
-        pivot["Grand Total"] = pivot.mean(axis=1)
+        cp = pivot.copy()
+        # --- Add Grand Total Column (Row-wise Average) ---
+        cp = cp.fillna(0).round(2)
+        pivot["Grand Total"] = cp.sum(axis=1)
+        pivot["Average"] = cp.mean(axis=1)
 
-        grand_row = pd.DataFrame(pivot.mean(axis=0)).T
+        # --- Add Grand Total Row ---
+        grand_row = cp.sum(axis=0).to_frame().T
+        grand_row["Grand Total"] = pivot["Grand Total"].sum()
+        grand_row["Average"] = pivot["Average"].sum()
         grand_row.index = ["Grand Total"]
 
-        pivot = pd.concat([pivot, grand_row])
+        # --- Add Average Row ---
+        avg_row = cp.mean(axis=0).to_frame().T
+        avg_row["Grand Total"] = pivot["Grand Total"].mean()
+        avg_row["Average"] = pivot["Average"].mean()
+        avg_row.index = ["Average"]
 
-        # --- Formatting (Excel-like) ---
+        pivot = pd.concat([pivot, grand_row, avg_row])
+
+        # --- Formatting (optional, Excel-like) ---
         pivot = pivot.fillna(0).round(0).astype(int).astype(str)
+
         # --- Make Month/total the first column instead of an index ---
         pivot = pivot.reset_index().rename(columns={"index": "Month"})
 
