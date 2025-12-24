@@ -45,66 +45,64 @@ def get_market_crisis_events() -> DataFrame:
     return df
 
 
-def calculate_portfolio_return_for_period(
-    trading_df: DataFrame,
-    start_date: pd.Timestamp,
-    end_date: pd.Timestamp,
-    initial_portfolio: float = 100_000
-) -> float:
+def calculate_portfolio_return_for_period(equity_df, period_start, period_end, initial_portfolio):
     """
-    Calculate portfolio return for a specific date period.
+    Calculate portfolio return for a specific time period.
 
-    Parameters:
-    -----------
-    trading_df : DataFrame
-        DataFrame with Entry Date, Exit Date, and P&L Amount
-    start_date : pd.Timestamp
-        Start date of the period (portfolio value calculated before this date)
-    end_date : pd.Timestamp
-        End date of the period (portfolio value calculated at end of this date)
-    initial_portfolio : float
-        Initial portfolio value
+    Args:
+        equity_df: DataFrame with date and equity columns
+        period_start: Start date of the period
+        period_end: End date of the period
+        initial_portfolio: Initial portfolio value (for reference)
 
     Returns:
-    --------
-    float
-        Total return percentage for the period
+        Return percentage for the period
     """
-    # Calculate portfolio value at start of period
-    # Sum all P&L realized strictly before start_date (exclude start_date itself)
-    pl_before_start = trading_df[trading_df["Exit Date"]
-                                 < start_date]["P&L Amount"].sum()
-    portfolio_start = initial_portfolio + pl_before_start
+    # Convert to datetime if needed
+    period_start = pd.to_datetime(period_start)
+    period_end = pd.to_datetime(period_end)
 
-    # Calculate portfolio value at end of period
-    # Sum all P&L realized up to and including end_date
-    pl_before_end = trading_df[trading_df["Exit Date"]
-                               <= end_date]["P&L Amount"].sum()
-    portfolio_end = initial_portfolio + pl_before_end
+    # Filter equity curve for the period
+    period_df = equity_df[
+        (equity_df["date"] >= period_start) &
+        (equity_df["date"] <= period_end)
+    ]
 
-    # Calculate period return
-    if portfolio_start == 0:
-        return 0.0
+    if len(period_df) == 0:
+        return None
 
-    period_return = ((portfolio_end / portfolio_start) - 1) * 100
-    return period_return
+    # Get start and end equity values
+    start_equity = period_df.iloc[0]["equity"]
+    end_equity = period_df.iloc[-1]["equity"]
+
+    # Calculate return percentage
+    if start_equity == 0:
+        return None
+
+    return ((end_equity - start_equity) / start_equity) * 100
 
 
-def market_crisis_return_distrubition(df: DataFrame):
+def market_crisis_return_distribution(df: DataFrame):
     """
     Calculate portfolio and S&P 500 returns for each market crisis event period.
     Expects the input DataFrame to contain:
-    - Entry Date
-    - Exit Date
-    - P&L Amount
+    - date
+    - equity
+    - cash
+    - positions_value
+    - num_positions
     """
-    trading_df = df.copy()
-    trading_df["Entry Date"] = pd.to_datetime(trading_df["Entry Date"])
-    trading_df["Exit Date"] = pd.to_datetime(trading_df["Exit Date"])
+    # Work on a copy to avoid mutating the caller
+    equity_df = df.copy()
+    equity_df["date"] = pd.to_datetime(equity_df["date"])
+    equity_df = equity_df.sort_values("date")
 
     # Get market crisis events
     crisis_df = get_market_crisis_events()
-    initial_portfolio = df.iloc[0]["Total Portfolio Value"]
+
+    # Get initial portfolio value (first equity value)
+    initial_portfolio = equity_df.iloc[0]["equity"]
+
     # Calculate returns for each event period
     portfolio_returns = []
     sp500_returns = []
@@ -115,29 +113,40 @@ def market_crisis_return_distrubition(df: DataFrame):
 
         # Calculate portfolio return for this period
         portfolio_return = calculate_portfolio_return_for_period(
-            trading_df, period_start, period_end, initial_portfolio
+            equity_df, period_start, period_end, initial_portfolio
         )
         portfolio_returns.append(portfolio_return)
 
         # Calculate S&P 500 return for this period
         try:
             sp500_return = get_sp500_return_for_period(
-                period_start, period_end)
+                period_start, period_end
+            )
             sp500_returns.append(sp500_return)
         except Exception as e:
             # If data is not available, set to None
             sp500_returns.append(None)
             print(
-                f"Warning: Could not calculate S&P 500 return for {event_row['Event']}: {e}")
+                f"Warning: Could not calculate S&P 500 return for {event_row['Event']}: {e}"
+            )
 
     # Add calculated returns to the DataFrame
     crisis_df["Portfolio"] = portfolio_returns
     crisis_df["S&P 500"] = sp500_returns
-    crisis_df["Alpha"] = crisis_df["Portfolio"] - crisis_df["S&P 500"]
+
+    # Calculate alpha (handle NaN values)
+    crisis_df["Alpha"] = crisis_df.apply(
+        lambda row: row["Portfolio"] - row["S&P 500"]
+        if pd.notna(row["Portfolio"]) and pd.notna(row["S&P 500"])
+        else None,
+        axis=1
+    )
 
     # Format dates as "Mon-YY"
-    crisis_df["Period Start"] = crisis_df["Period Start"].dt.strftime("%b-%y")
-    crisis_df["Period End"] = crisis_df["Period End"].dt.strftime("%b-%y")
+    crisis_df["Period Start"] = pd.to_datetime(
+        crisis_df["Period Start"]).dt.strftime("%b-%y")
+    crisis_df["Period End"] = pd.to_datetime(
+        crisis_df["Period End"]).dt.strftime("%b-%y")
 
     # Format returns as percentages with 2 decimal places, or empty string if NaN
     def format_percentage(val):
@@ -151,11 +160,30 @@ def market_crisis_return_distrubition(df: DataFrame):
     display_df["S&P 500"] = display_df["S&P 500"].apply(format_percentage)
     display_df["Alpha"] = display_df["Alpha"].apply(format_percentage)
 
-    # Convert Months to int, but keep as is for display (some may be empty in image)
-    display_df["Months"] = display_df["Months"].astype(int)
+    # Convert Months to int, handling any NaN values
+    if "Months" in display_df.columns:
+        display_df["Months"] = display_df["Months"].fillna(0).astype(int)
 
     # Reorder columns to match desired output
-    display_df = display_df[["Event", "Period Start",
-                             "Period End", "Months", "Portfolio", "S&P 500", "Alpha"]]
+    display_df = display_df[[
+        "Event",
+        "Period Start",
+        "Period End",
+        "Months",
+        "Portfolio",
+        "S&P 500",
+        "Alpha"
+    ]]
 
-    return display_df
+    # Formatted for the API to send as JSON records.
+    row_data = pd.DataFrame({
+        "event": crisis_df['Event'],
+        "periodStart": crisis_df['Period Start'],
+        "periodEnd": crisis_df['Period End'],
+        "months": crisis_df['Months'],
+        "portfolio_return": crisis_df['Portfolio'],
+        "sP_500": crisis_df['S&P 500'],
+        "alpha": crisis_df['Alpha'],
+    }).fillna(0).to_dict(orient="records")
+
+    return display_df, row_data

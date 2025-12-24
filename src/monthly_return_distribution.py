@@ -3,103 +3,83 @@ import pandas as pd
 from src.utils.get_sp500_returns import (
     get_sp500_monthly_returns,
 )
-from dateutil.relativedelta import relativedelta
-
 from src.bucket_classification import bucket_classification
 
 
 def monthly_return_distribution(df: DataFrame):
-    df['Entry Date'] = pd.to_datetime(df['Entry Date'])
+    df = df.copy()
+    # Convert date to datetime
+    df['date'] = pd.to_datetime(df['date'])
 
-    df['Exit Date'] = pd.to_datetime(df['Exit Date'])
+    # Sort by date
+    df = df.sort_values('date')
 
-    # Create a month column for exit dates (when P&L is realized)
-    df['Exit Month'] = df['Exit Date'].dt.to_period('M')
+    # Extract year-month for grouping
+    df['year_month'] = df['date'].dt.to_period('M')
 
-    start_date = df['Entry Date'].min().to_period('M').to_timestamp()
-    end_date = df['Exit Date'].max().to_period('M').to_timestamp()
-    all_months = pd.period_range(start=start_date, end=end_date, freq='M')
+    # Get the last day of each month
+    monthly_data = df.groupby('year_month').last().reset_index()
 
-    # Calculate monthly P&L indexed by month
-    monthly_pl = (
-        df.groupby('Exit Month')['P&L Amount']
-        .sum()
-        .reindex(all_months, fill_value=0)
-    )
+    # Calculate monthly returns
+    monthly_data['monthly_return'] = monthly_data['equity'].pct_change() * 100
 
-    # Starting portfolio value
-    initial_portfolio = df.iloc[0]["Total Portfolio Value"]
+    # Calculate running peak
+    monthly_data['running_peak'] = monthly_data['equity'].cummax()
 
-    # Cumulative portfolio values without explicit loops
-    portfolio_values = initial_portfolio + monthly_pl.cumsum()
+    # Calculate drawdown percentage
+    monthly_data['drawdown_pct'] = ((monthly_data['equity'] - monthly_data['running_peak']) /
+                                    monthly_data['running_peak'] * 100)
 
-    # Monthly returns with vectorized pct_change
-    monthly_returns = pd.DataFrame({
-        'Month': all_months.strftime('%b-%y'),
-        'Total Portfolio Value': portfolio_values,
-    })
-    # Running peak is used to measure drawdowns from the highest portfolio value reached so far.
-    monthly_returns['Running Peak'] = monthly_returns['Total Portfolio Value'].cummax()
-    monthly_returns['Drawdown %'] = (
-        (monthly_returns['Total Portfolio Value'] /
-         monthly_returns['Running Peak']) - 1
-    ) * 100
-    monthly_returns['Monthly Return'] = (
-        monthly_returns['Total Portfolio Value']
-        .pct_change()
-        .fillna(0)
-        * 100
-    )
-    # Track available capital by month using the last trade of each month.
-    # Align to the full month range so we don't introduce NaNs when months had no trades.
-    available_capital_by_month = (
-        df.sort_values('Exit Date')
-        .groupby('Exit Month')['Available Capital After Trade']
-        .last()
-        .reindex(all_months)
-        .ffill()
-        .fillna(initial_portfolio)
-    )
-    monthly_returns['Available Capital'] = available_capital_by_month.values
-    monthly_returns['Available Capital %'] = (
-        available_capital_by_month / initial_portfolio * 100
-    )
+    # Calculate available capital percentage
+    monthly_data['available_capital_pct'] = (
+        monthly_data['cash'] / monthly_data['equity'] * 100)
 
-    one_month_ago = start_date - relativedelta(months=1)
+    # Get S&P 500 returns for the entire date range
+    start_date = df['date'].min()
+    end_date = df['date'].max()
+
     sp500_returns, _ = get_sp500_monthly_returns(
-        start=one_month_ago.strftime("%Y-%m-%d"),
+        start=start_date.strftime("%Y-%m-%d"),
         end=end_date.strftime("%Y-%m-%d"),
     )
 
-    # Add S&P 500 returns
-    monthly_returns['S&P 500'] = monthly_returns['Month'].map(sp500_returns)
+    # Add S&P 500 returns with proper format conversion
+    monthly_data['sp500_return'] = monthly_data['year_month'].apply(
+        lambda x: sp500_returns.get(x.strftime('%b-%y'))
+    )
 
-    # Calculate Alpha (Portfolio Return - S&P 500 Return)
-    monthly_returns['Alpha'] = monthly_returns['Monthly Return'] - \
-        monthly_returns['S&P 500']
+    # Calculate alpha (portfolio return - benchmark return)
+    monthly_data['alpha'] = monthly_data['monthly_return'] - \
+        monthly_data['sp500_return'].fillna(0)
+
+    # Format the output
+    monthly_returns = pd.DataFrame({
+        'Month': monthly_data['year_month'].dt.strftime('%b-%y'),
+        'Total Portfolio Value': monthly_data['equity'].apply(lambda x: f'${x:,.2f}'),
+        'Running Peak': monthly_data['running_peak'].apply(lambda x: f'{x:,.0f}'),
+        'Drawdown %': monthly_data['drawdown_pct'].apply(lambda x: f'{x:.2f}%'),
+        'Monthly Return': monthly_data['monthly_return'].apply(lambda x: f'{x:.2f}%' if pd.notna(x) else '0.00%'),
+        'Available Capital': monthly_data['cash'].apply(lambda x: f'${x:,.2f}'),
+        'Available Capital %': monthly_data['available_capital_pct'].apply(lambda x: f'{x:.2f}%'),
+        'S&P 500': monthly_data['sp500_return'].apply(lambda x: f'{x:.2f}%' if pd.notna(x) else 'N/A'),
+        'Alpha': monthly_data['alpha'].apply(lambda x: f'{x:.2f}%' if pd.notna(x) else 'N/A')
+    })
+
+    # Formatted for the API to send as JSON records.
+    row_data = pd.DataFrame({
+        'date': monthly_data['date'],
+        'month': monthly_data['year_month'].dt.strftime('%b-%y'),
+        'total_portfolio_value': monthly_data['equity'],
+        'running_peak': monthly_data['running_peak'],
+        'drawdown_pct': monthly_data['drawdown_pct'],
+        'monthly_return': monthly_data['monthly_return'],
+        'available_capital': monthly_data['cash'],
+        'available_capital_pct': monthly_data['available_capital_pct'],
+        'sp500_return': monthly_data['sp500_return'],
+        'alpha': monthly_data['alpha']
+    }).fillna(0).to_dict(orient="records")
 
     bucket_summary = bucket_classification(
         monthly_returns, return_col='Monthly Return', bucket_size=2)
 
-    # Create a formatted copy for display/export
-    display_df = monthly_returns.copy()
-    display_df['Monthly Return'] = display_df['Monthly Return'].apply(
-        lambda x: f"{x:.2f}%")
-    display_df['S&P 500'] = display_df['S&P 500'].apply(
-        lambda x: f"{x:.2f}%" if pd.notna(x) else "")
-    display_df['Alpha'] = display_df['Alpha'].apply(
-        lambda x: f"{x:.2f}%" if pd.notna(x) else "")
-    display_df['Total Portfolio Value'] = display_df['Total Portfolio Value'].apply(
-        lambda x: f"${x:,.2f}"
-    )
-    display_df['Available Capital'] = display_df['Available Capital'].apply(
-        lambda x: f"${x:,.2f}"
-    )
-    display_df['Available Capital %'] = display_df['Available Capital %'].apply(
-        lambda x: f"{x:.2f}%"
-    )
-    display_df['Drawdown %'] = display_df['Drawdown %'].apply(
-        lambda x: f"{x:.2f}%"
-    )
-
-    return display_df, bucket_summary
+    return monthly_returns, bucket_summary, row_data

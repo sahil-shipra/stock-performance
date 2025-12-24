@@ -43,8 +43,12 @@ def get_sp500_returns(interval="1d"):
 
     # Download full available history
     # Add auto_adjust=True to simplify column structure
-    data = yf.download("^GSPC", period="max",
-                       interval=interval, auto_adjust=False)
+    data = yf.download("^GSPC",
+                       period="max",
+                       timeout=30,
+                       threads=False,
+                       interval=interval,
+                       auto_adjust=False)
 
     if data.empty:
         raise ValueError("No data downloaded. Check internet or yfinance.")

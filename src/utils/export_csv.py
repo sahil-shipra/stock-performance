@@ -57,12 +57,11 @@ def export_file(sheets, filename, output_dir="output", timestamp=False):
         # Full path
         full_path = os.path.join(output_dir, filename)
 
-        with pd.ExcelWriter(full_path, engine="xlsxwriter") as writer:
+        with pd.ExcelWriter(full_path, engine="xlsxwriter", engine_kwargs={'options': {'nan_inf_to_errors': True}}) as writer:
 
             # Dictionary of sheet names + dataframes
 
             workbook = writer.book
-            workbook.nan_inf_to_errors = True
 
             # --- HEADER FORMAT (matches your screenshot) ---
             header_format = workbook.add_format({

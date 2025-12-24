@@ -40,9 +40,9 @@ def master_analytics(df, portfolio_name="Portfolio"):
     avg_win = wins["P&L Amount"].mean() if win_trades > 0 else 0
     avg_loss = losses["P&L Amount"].mean() if loss_trades > 0 else 0
 
-    payoff_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else np.nan
+    payoff_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else 0
     profit_factor = wins["P&L Amount"].sum(
-    ) / abs(losses["P&L Amount"].sum()) if loss_trades > 0 else np.nan
+    ) / abs(losses["P&L Amount"].sum()) if loss_trades > 0 else 0
 
     expectancy = (win_rate / 100 * avg_win) + ((1 - win_rate / 100) * avg_loss)
 
@@ -52,7 +52,7 @@ def master_analytics(df, portfolio_name="Portfolio"):
     drawdown = (equity_curve - rolling_max) / rolling_max
     max_dd = drawdown.min() * 100
 
-    calmar_ratio = cagr / abs(max_dd) if max_dd != 0 else np.nan
+    calmar_ratio = cagr / abs(max_dd) if max_dd != 0 else 0
 
     # --- Output ---
     summary = pd.DataFrame([{
